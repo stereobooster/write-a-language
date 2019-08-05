@@ -1,0 +1,85 @@
+<html>
+  <body>
+    <style> textarea { width: 100%; max-width: 100%; min-width: 100%; min-height: 80px; }
+    </style>
+    <form id="form">
+      <textarea id="program" placeholder="program"></textarea><br /><br />
+      <input type="submit" value="evaluate" /><br /><br />
+      <textarea id="result" placeholder="result"></textarea>
+    </form>
+    <script>
+      // Convert a text into a list of tokens
+      const tokenize = program =>
+        program
+          .replace(/\(/g, " ( ")
+          .replace(/\)/g, " ) ")
+          .replace(/^\s+|\s+$/g, "")
+          .split(/\s+/g);
+
+      const parse = program => tokens_to_ast(tokenize(program));
+
+      const tokens_to_ast = tokens => {
+        if (tokens.length === 0) {
+          throw new SyntaxError("Unexpected end of file");
+        }
+        const token = tokens.shift();
+        if (token === "(") {
+          let L = [];
+          while (tokens[0] !== ")") {
+            L.push(tokens_to_ast(tokens));
+          }
+          tokens.shift(); // pop off ')'
+          return L;
+        } else if (token === ")") {
+          throw new SyntaxError("Unexpected closing parenthesis");
+        } else if (!isNaN(parseFloat(token))) {
+          // Numbers become numbers
+          return parseFloat(token);
+        } else {
+          // every other token is a symbol or an atom
+          // for simplicity we use strings
+          return token;
+        }
+      };
+
+      const evaluate = ast => {
+        // number handling, like this: 2
+        if (typeof ast === "number") {
+          return ast;
+        } else {
+          // function call handling
+          let [name, first, second] = ast;
+          if (name === "+") {
+            return evaluate(first) + evaluate(second);
+          } else if (name === "-") {
+            return evaluate(first) - evaluate(second);
+          } else if (typeof name === "number") {
+            // number handling, like this: (2)
+            return name;
+          } else {
+            // runtime error
+            throw new Error(`${name} is not a function`);
+          }
+        }
+      };
+
+      // REPL
+      const form = document.getElementById("form");
+      const programInput = document.getElementById("program");
+      const resultOutput = document.getElementById("result");
+      form.addEventListener("submit", e => {
+        // prevent page reload
+        e.preventDefault();
+        try {
+          // evaluate a program
+          const result = evaluate(parse(programInput.value));
+          // and print it to the textarea
+          resultOutput.value = result;
+        } catch (e) {
+          // in case of error print the error to the textarea
+          resultOutput.value = e.message;
+        }
+      });
+    </script>
+  </body>
+</html>
