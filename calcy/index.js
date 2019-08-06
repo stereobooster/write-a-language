@@ -43,9 +43,6 @@ const evaluate = ast => {
       return evaluate(first) + evaluate(second);
     } else if (name === "-") {
       return evaluate(first) - evaluate(second);
-    } else if (typeof name === "number") {
-      // number handling, like this: (2)
-      return name;
     } else {
       // runtime error
       throw new Error(`${name} is not a function`);
