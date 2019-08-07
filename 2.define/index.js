@@ -6,6 +6,8 @@ const tokenize = program =>
     .replace(/^\s+|\s+$/g, "")
     .split(/\s+/g);
 
+class RuntimeError extends Error {}
+
 const parse = program => tokens_to_ast(tokenize(program));
 
 const tokens_to_ast = tokens => {
@@ -37,21 +39,30 @@ const evaluate = (ast, env = {}) => {
     return ast;
   } else if (typeof ast === "string") {
     if (env[ast] === undefined) {
-      throw new Error(`${ast} is undefined`);
+      throw new RuntimeError(
+        `Can't find ${ast} variable. Use (define ${ast} 1) to define it, where 1 is value`
+      );
     }
     return env[ast];
   } else {
     // function call handling
     let [name, first, second] = ast;
+    if (first === undefined || second === undefined) {
+      throw new RuntimeError(`Function call needs two arguments`);
+    }
     if (name === "+") {
       return evaluate(first, env) + evaluate(second, env);
     } else if (name === "-") {
       return evaluate(first, env) - evaluate(second, env);
     } else if (name === "define") {
+      if (typeof first !== "string") {
+        throw new RuntimeError(
+          `Fitst argument of define suppose to be symbol, instead found ${first}`
+        );
+      }
       return (env[first] = evaluate(second, env));
     } else {
-      // runtime error
-      throw new Error(`${name} is not a function`);
+      throw new RuntimeError(`${name} is not a function`);
     }
   }
 };
@@ -86,7 +97,9 @@ rl.prompt();
 
 rl.on("line", input => {
   try {
-    console.log(evaluate(parse(input), env));
+    if (input !== "") {
+      console.log(evaluate(parse(input), env));
+    }
   } catch (e) {
     console.log(e.message);
   }
