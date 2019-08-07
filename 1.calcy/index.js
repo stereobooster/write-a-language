@@ -26,8 +26,7 @@ const tokens_to_ast = tokens => {
     // Numbers become numbers
     return parseFloat(token);
   } else {
-    // every other token is a symbol or an atom
-    // for simplicity we use strings
+    // Every other token is a symbol. For simplicity we use strings
     return token;
   }
 };
