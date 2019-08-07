@@ -8,6 +8,8 @@ const tokenize = program =>
 
 class RuntimeError extends Error {}
 
+class TypeError extends Error {}
+
 const parse = program => tokens_to_ast(tokenize(program));
 
 const tokens_to_ast = tokens => {
@@ -69,8 +71,13 @@ const evaluate = (ast, env = {}) => {
         );
       }
       if (typeof first !== "string") {
-        throw new RuntimeError(
+        throw new TypeError(
           `Fitst argument of define suppose to be symbol, instead found "${first}"`
+        );
+      }
+      if (typeof second !== "number") {
+        throw new TypeError(
+          `Second argument of define suppose to be number, instead found "${first}"`
         );
       }
       return (env[first] = evaluate(second, env));
