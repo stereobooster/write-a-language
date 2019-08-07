@@ -47,19 +47,26 @@ const evaluate = (ast, env = {}) => {
   } else {
     // function call handling
     let [name, first, second] = ast;
+    const numberOfArguments = ast.length - 1;
     if (name === "+") {
-      if (first === undefined || second === undefined) {
-        throw new RuntimeError(`"${name}" call needs two arguments`);
+      if (numberOfArguments !== 2) {
+        throw new RuntimeError(
+          `"${name}" call needs 2 arguments, instead got ${numberOfArguments}`
+        );
       }
       return evaluate(first, env) + evaluate(second, env);
     } else if (name === "-") {
-      if (first === undefined || second === undefined) {
-        throw new RuntimeError(`"${name}" call needs two arguments`);
+      if (numberOfArguments !== 2) {
+        throw new RuntimeError(
+          `"${name}" call needs 2 arguments, instead got ${numberOfArguments}`
+        );
       }
       return evaluate(first, env) - evaluate(second, env);
     } else if (name === "define") {
-      if (first === undefined || second === undefined) {
-        throw new RuntimeError(`"${name}" call needs two arguments`);
+      if (numberOfArguments !== 2) {
+        throw new RuntimeError(
+          `"${name}" call needs 2 arguments, instead got ${numberOfArguments}`
+        );
       }
       if (typeof first !== "string") {
         throw new RuntimeError(
