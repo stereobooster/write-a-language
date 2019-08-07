@@ -40,29 +40,35 @@ const evaluate = (ast, env = {}) => {
   } else if (typeof ast === "string") {
     if (env[ast] === undefined) {
       throw new RuntimeError(
-        `Can't find ${ast} variable. Use (define ${ast} 1) to define it, where 1 is value`
+        `Can't find "${ast}" variable. Use \`(define ${ast} 1)\` to define it, where 1 is a value`
       );
     }
     return env[ast];
   } else {
     // function call handling
     let [name, first, second] = ast;
-    if (first === undefined || second === undefined) {
-      throw new RuntimeError(`Function call needs two arguments`);
-    }
     if (name === "+") {
+      if (first === undefined || second === undefined) {
+        throw new RuntimeError(`"${name}" call needs two arguments`);
+      }
       return evaluate(first, env) + evaluate(second, env);
     } else if (name === "-") {
+      if (first === undefined || second === undefined) {
+        throw new RuntimeError(`"${name}" call needs two arguments`);
+      }
       return evaluate(first, env) - evaluate(second, env);
     } else if (name === "define") {
+      if (first === undefined || second === undefined) {
+        throw new RuntimeError(`"${name}" call needs two arguments`);
+      }
       if (typeof first !== "string") {
         throw new RuntimeError(
-          `Fitst argument of define suppose to be symbol, instead found ${first}`
+          `Fitst argument of define suppose to be symbol, instead found "${first}"`
         );
       }
       return (env[first] = evaluate(second, env));
     } else {
-      throw new RuntimeError(`${name} is not a function`);
+      throw new RuntimeError(`"${name}" is not a function`);
     }
   }
 };
