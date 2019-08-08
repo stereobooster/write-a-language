@@ -10,7 +10,7 @@ const parse = program => tokens_to_ast(tokenize(program));
 
 const tokens_to_ast = tokens => {
   if (tokens.length === 0) {
-    throw new SyntaxError("Unexpected end of file");
+    throw new SyntaxError("Expected ')' at the end of input");
   }
   const token = tokens.shift();
   if (token === "(") {
@@ -21,12 +21,12 @@ const tokens_to_ast = tokens => {
     tokens.shift(); // pop off ')'
     return L;
   } else if (token === ")") {
-    throw new SyntaxError("Unexpected closing parenthesis");
+    throw new SyntaxError("Unexpected ')'");
   } else if (!isNaN(parseFloat(token))) {
-    // Numbers become numbers
+    // numbers
     return parseFloat(token);
   } else {
-    // Every other token is a symbol. For simplicity we use strings
+    // symbols, which we represent as JS strings
     return token;
   }
 };
@@ -42,9 +42,6 @@ const evaluate = ast => {
       return evaluate(first) + evaluate(second);
     } else if (name === "-") {
       return evaluate(first) - evaluate(second);
-    } else {
-      // runtime error
-      throw new Error(`${name} is not a function`);
     }
   }
 };
@@ -77,7 +74,9 @@ rl.prompt();
 
 rl.on("line", input => {
   try {
-    console.log(evaluate(parse(input)));
+    if (input.trim() !== "") {
+      console.log(evaluate(parse(input)));
+    }
   } catch (e) {
     console.log(e.message);
   }
