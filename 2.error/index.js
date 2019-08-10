@@ -48,16 +48,23 @@ try {
   assert.equal(e.message, `Expected ")" at the end of the input`);
 }
 try {
-  console.log(parse("()+"));
+  parse("()+");
 } catch (e) {
   assert.equal(e.message, `Unexpected "+" after ")"`);
+}
+try {
+  parse("()()");
+} catch (e) {
+  assert.equal(e.message, `Unexpected "(" after ")"`);
 }
 
 class RuntimeError extends Error {}
 
 class TypeError extends Error {}
 
-const evaluate = (ast, env = {}) => {
+const isExpression = ast => Array.isArray(ast);
+
+const evaluate = ast => {
   // function call handling
   let [name, first, second] = ast;
   const numberOfArguments = ast.length - 1;
@@ -67,34 +74,34 @@ const evaluate = (ast, env = {}) => {
         `"${name}" needs 2 arguments, instead got ${numberOfArguments}`
       );
     }
-    if (!Array.isArray(first) && typeof first !== "number") {
+    if (!isExpression(first) && typeof first !== "number") {
       throw new TypeError(
         `"${name}" expects number as the first argument, instead got "${first}"`
       );
     }
-    if (!Array.isArray(second) && typeof firsecondst !== "number") {
+    if (!isExpression(second) && typeof second !== "number") {
       throw new TypeError(
         `"${name}" expects number as the second argument, instead got "${second}"`
       );
     }
-    return evaluate(first, env) + evaluate(second, env);
+    return evaluate(first) + evaluate(second);
   } else if (name === "-") {
     if (numberOfArguments !== 2) {
       throw new TypeError(
-        `"${name}" needs 2 arguments, instead got ${numberOfArguments}`
+        `"${name}" expects 2 arguments, instead got ${numberOfArguments}`
       );
     }
-    if (!Array.isArray(first) && typeof first !== "number") {
+    if (!isExpression(first) && typeof first !== "number") {
       throw new TypeError(
         `"${name}" expects number as the first argument, instead got "${first}"`
       );
     }
-    if (!Array.isArray(second) && typeof firsecondst !== "number") {
+    if (!isExpression(second) && typeof second !== "number") {
       throw new TypeError(
         `"${name}" expects number as the second argument, instead got "${second}"`
       );
     }
-    return evaluate(first, env) - evaluate(second, env);
+    return evaluate(first) - evaluate(second);
   } else {
     throw new RuntimeError(`"${name}" is not a function`);
   }
@@ -109,7 +116,7 @@ try {
 try {
   evaluate(parse("(+ 2 2 2)"));
 } catch (e) {
-  assert.equal(e.message, `"+" needs 2 arguments, instead got 3`);
+  assert.equal(e.message, `"+" expects 2 arguments, instead got 3`);
 }
 try {
   evaluate(parse("(+ x x)"));
@@ -119,8 +126,6 @@ try {
     `"+" expects number as the first argument, instead got "x"`
   );
 }
-
-const env = {};
 
 // REPL
 const readline = require("readline");
