@@ -1,4 +1,4 @@
-# Calcy + error handling
+# Calcy + errors
 
 To run CLI REPL
 
