@@ -84,7 +84,6 @@ const evaluate = (ast, env = {}) => {
   } else if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
-    checkArgumentIsNumber(name, "second", second);
     if (env[first] !== undefined) {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
@@ -97,12 +96,11 @@ const evaluate = (ast, env = {}) => {
 // Tests
 const assert = require("assert");
 {
-  const testEnv = {};
-  evaluate(parse("(define x 1)"), testEnv);
+  let testEnv = {};
+  assert.equal(evaluate(parse("(define x 1)"), testEnv), 1);
   assert.equal(testEnv["x"], 1);
 
-  const result = evaluate(parse("(+ x x)"), { x: 1 });
-  assert.equal(result, 2);
+  assert.equal(evaluate(parse("(+ x x)"), { x: 1 }), 2);
 
   try {
     evaluate(parse("(+ x x)"), {});
@@ -126,6 +124,19 @@ const assert = require("assert");
     evaluate(parse("(define x 1)"), { x: 1 });
   } catch (e) {
     assert.equal(e.message, `Can't redefine "x" variable`);
+  }
+
+  testEnv = { y: 1 };
+  evaluate(parse("(define x y)"), testEnv);
+  assert.equal(testEnv["x"], 1);
+
+  try {
+    evaluate(parse("(define x x)"));
+  } catch (e) {
+    assert.equal(
+      e.message,
+      'Can\'t find "x" variable. Use `(define x ...)` to define it' == ""
+    );
   }
 }
 
