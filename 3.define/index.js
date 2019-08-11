@@ -84,7 +84,7 @@ const evaluate = (ast, env = {}) => {
   } else if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
-    if (env[first] !== undefined) {
+    if (env[first] !== undefined || first === "+" || first === "-") {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
     return (env[first] = evaluate(second, env));
@@ -135,8 +135,17 @@ const assert = require("assert");
   } catch (e) {
     assert.equal(
       e.message,
-      'Can\'t find "x" variable. Use `(define x ...)` to define it' == ""
+      'Can\'t find "x" variable. Use `(define x ...)` to define it'
     );
+  }
+
+  try {
+    testEnv = {};
+    evaluate(parse("(define + 1)"), testEnv);
+    // we don't want this to be valid program
+    evaluate(parse("(+ + +)"), testEnv);
+  } catch (e) {
+    assert.equal(e.message, `Can't redefine "+" variable`);
   }
 }
 
