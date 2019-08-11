@@ -6,26 +6,25 @@ const tokenize = program =>
     .replace(/^\s+|\s+$/g, "")
     .split(/\s+/g);
 
-class RuntimeError extends Error {}
-
-class TypeError extends Error {}
-
 const parse = program => tokens_to_ast(tokenize(program));
 
-const tokens_to_ast = tokens => {
+const tokens_to_ast = (tokens, subcall = false) => {
   if (tokens.length === 0) {
-    throw new SyntaxError("Expected ')' at the end of input");
+    throw new SyntaxError(`Expected ")" at the end of the input`);
   }
   const token = tokens.shift();
   if (token === "(") {
     let L = [];
     while (tokens[0] !== ")") {
-      L.push(tokens_to_ast(tokens));
+      L.push(tokens_to_ast(tokens, true));
     }
     tokens.shift(); // pop off ')'
+    if (!subcall && tokens.length !== 0) {
+      throw new SyntaxError(`Unexpected "${tokens[0]}" after ")"`);
+    }
     return L;
   } else if (token === ")") {
-    throw new SyntaxError("Unexpected ')'");
+    throw new SyntaxError(`Unexpected ")"`);
   } else if (!isNaN(parseFloat(token))) {
     // numbers
     return parseFloat(token);
@@ -35,74 +34,100 @@ const tokens_to_ast = tokens => {
   }
 };
 
+class RuntimeError extends Error {}
+
+class TypeError extends Error {}
+
+const isExpression = ast => Array.isArray(ast);
+const checkNumberOfArguments = (name, numberOfArguments, expected) => {
+  if (numberOfArguments !== expected) {
+    throw new TypeError(
+      `"${name}" expects ${expected} arguments, instead got ${numberOfArguments}`
+    );
+  }
+};
+const checkArgumentIsNumber = (name, position, value) => {
+  if (!isExpression(value) && typeof value !== "number") {
+    throw new TypeError(
+      `"${name}" expects number as the ${position} argument, instead got "${value}"`
+    );
+  }
+};
+const checkArgumentIsSymbol = (name, position, value) => {
+  if (typeof value !== "string") {
+    throw new TypeError(
+      `"${name}" expects symbol as the ${position} argument, instead got "${value}"`
+    );
+  }
+};
+
 const evaluate = (ast, env = {}) => {
-  // number handling, like this: 2
-  if (typeof ast === "number") {
-    return ast;
-  } else if (typeof ast === "string") {
+  if (typeof ast === "string") {
     if (env[ast] === undefined) {
       throw new RuntimeError(
-        `Can't find "${ast}" variable. Use \`(define ${ast} 1)\` to define it, where 1 is a value`
+        `Can't find "${ast}" variable. Use \`(define ${ast} ...)\` to define it`
       );
     }
     return env[ast];
-  } else {
-    // function call handling
-    let [name, first, second] = ast;
-    const numberOfArguments = ast.length - 1;
-    if (name === "+") {
-      if (numberOfArguments !== 2) {
-        throw new RuntimeError(
-          `"${name}" call needs 2 arguments, instead got ${numberOfArguments}`
-        );
-      }
-      return evaluate(first, env) + evaluate(second, env);
-    } else if (name === "-") {
-      if (numberOfArguments !== 2) {
-        throw new RuntimeError(
-          `"${name}" call needs 2 arguments, instead got ${numberOfArguments}`
-        );
-      }
-      return evaluate(first, env) - evaluate(second, env);
-    } else if (name === "define") {
-      if (numberOfArguments !== 2) {
-        throw new RuntimeError(
-          `"${name}" call needs 2 arguments, instead got ${numberOfArguments}`
-        );
-      }
-      if (typeof first !== "string") {
-        throw new TypeError(
-          `Fitst argument of define suppose to be symbol, instead found "${first}"`
-        );
-      }
-      if (typeof second !== "number") {
-        throw new TypeError(
-          `Second argument of define suppose to be number, instead found "${first}"`
-        );
-      }
-      return (env[first] = evaluate(second, env));
-    } else {
-      throw new RuntimeError(`"${name}" is not a function`);
+  } else if (typeof ast === "number") {
+    return ast;
+  }
+  // function call handling
+  let [name, first, second] = ast;
+  const numberOfArguments = ast.length - 1;
+  if (name === "+") {
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    return evaluate(first, env) + evaluate(second, env);
+  } else if (name === "-") {
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    return evaluate(first, env) - evaluate(second, env);
+  } else if (name === "define") {
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    checkArgumentIsSymbol(name, "first", first);
+    checkArgumentIsNumber(name, "second", second);
+    if (env[first] !== undefined) {
+      throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
+    return (env[first] = evaluate(second, env));
+  } else {
+    throw new RuntimeError(`"${name}" is not a function`);
   }
 };
 
 // Tests
 const assert = require("assert");
-const program = "(- 5 (+ 2 1))";
-assert.deepStrictEqual(tokenize(program), [
-  "(",
-  "-",
-  "5",
-  "(",
-  "+",
-  "2",
-  "1",
-  ")",
-  ")"
-]);
-assert.deepStrictEqual(parse(program), ["-", 5, ["+", 2, 1]]);
-assert.deepStrictEqual(evaluate(["-", 5, ["+", 2, 1]]), 2);
+{
+  const testEnv = {};
+  evaluate(parse("(define x 1)"), testEnv);
+  assert.equal(testEnv["x"], 1);
+
+  const result = evaluate(parse("(+ x x)"), { x: 1 });
+  assert.equal(result, 2);
+
+  try {
+    evaluate(parse("(+ x x)"), {});
+  } catch (e) {
+    assert.equal(
+      e.message,
+      'Can\'t find "x" variable. Use `(define x ...)` to define it'
+    );
+  }
+
+  try {
+    evaluate(parse("(define 1 1)"), {});
+  } catch (e) {
+    assert.equal(
+      e.message,
+      `"define" expects symbol as the first argument, instead got "1"`
+    );
+  }
+
+  try {
+    evaluate(parse("(define x 1)"), { x: 1 });
+  } catch (e) {
+    assert.equal(e.message, `Can't redefine "x" variable`);
+  }
+}
 
 const env = {};
 
@@ -118,7 +143,7 @@ rl.prompt();
 rl.on("line", input => {
   try {
     if (input.trim() !== "") {
-      console.log(evaluate(parse(input)));
+      console.log(evaluate(parse(input), env));
     }
   } catch (e) {
     console.log(e.message);
