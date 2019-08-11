@@ -1,4 +1,4 @@
-# Calcy + define
+# Calcy + variable
 
 To run CLI REPL
 
