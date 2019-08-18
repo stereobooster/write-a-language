@@ -61,14 +61,14 @@ const checkArgumentIsSymbol = (name, position, value) => {
   }
 };
 
-const evaluate = (ast, env = {}) => {
+const evaluate = (ast, environment = {}) => {
   if (typeof ast === "string") {
-    if (env[ast] === undefined) {
+    if (environment[ast] === undefined) {
       throw new RuntimeError(
         `Can't find "${ast}" variable. Use \`(define ${ast} ...)\` to define it`
       );
     }
-    return env[ast];
+    return environment[ast];
   } else if (typeof ast === "number") {
     return ast;
   }
@@ -77,17 +77,17 @@ const evaluate = (ast, env = {}) => {
   const numberOfArguments = ast.length - 1;
   if (name === "+") {
     checkNumberOfArguments(name, numberOfArguments, 2);
-    return evaluate(first, env) + evaluate(second, env);
+    return evaluate(first, environment) + evaluate(second, environment);
   } else if (name === "-") {
     checkNumberOfArguments(name, numberOfArguments, 2);
-    return evaluate(first, env) - evaluate(second, env);
+    return evaluate(first, environment) - evaluate(second, environment);
   } else if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
-    if (env[first] !== undefined || first === "+" || first === "-") {
+    if (environment[first] !== undefined || first === "+" || first === "-") {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
-    return (env[first] = evaluate(second, env));
+    return (environment[first] = evaluate(second, environment));
   } else {
     throw new RuntimeError(`"${name}" is not a function`);
   }
@@ -96,9 +96,9 @@ const evaluate = (ast, env = {}) => {
 // Tests
 const assert = require("assert");
 {
-  let testEnv = {};
-  assert.equal(evaluate(parse("(define x 1)"), testEnv), 1);
-  assert.equal(testEnv["x"], 1);
+  let testEnvironment = {};
+  assert.equal(evaluate(parse("(define x 1)"), testEnvironment), 1);
+  assert.equal(testEnvironment["x"], 1);
 
   assert.equal(evaluate(parse("(+ x x)"), { x: 1 }), 2);
 
@@ -126,9 +126,9 @@ const assert = require("assert");
     assert.equal(e.message, `Can't redefine "x" variable`);
   }
 
-  testEnv = { y: 1 };
-  evaluate(parse("(define x y)"), testEnv);
-  assert.equal(testEnv["x"], 1);
+  testEnvironment = { y: 1 };
+  evaluate(parse("(define x y)"), testEnvironment);
+  assert.equal(testEnvironment["x"], 1);
 
   try {
     evaluate(parse("(define x x)"));
@@ -140,16 +140,16 @@ const assert = require("assert");
   }
 
   try {
-    testEnv = {};
-    evaluate(parse("(define + 1)"), testEnv);
+    testEnvironment = {};
+    evaluate(parse("(define + 1)"), testEnvironment);
     // we don't want this to be valid program
-    evaluate(parse("(+ + +)"), testEnv);
+    evaluate(parse("(+ + +)"), testEnvironment);
   } catch (e) {
     assert.equal(e.message, `Can't redefine "+" variable`);
   }
 }
 
-const env = {};
+const environment = {};
 
 // REPL
 const readline = require("readline");
@@ -163,7 +163,7 @@ rl.prompt();
 rl.on("line", input => {
   try {
     if (input.trim() !== "") {
-      console.log(evaluate(parse(input), env));
+      console.log(evaluate(parse(input), environment));
     }
   } catch (e) {
     console.log(e.message);
