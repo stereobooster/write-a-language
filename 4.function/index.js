@@ -55,7 +55,10 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
 const checkArgumentIsNumber = (name, position, value, environment) => {
   const isNumber =
     typeof value === "number" ||
-    (typeof value === "string" && typeof environment[value] === "number") ||
+    (typeof value === "string" &&
+      (typeof environment[value] === "number" ||
+        // ignore undefined because it will throw exception later
+        typeof environment[value] === "undefined")) ||
     // define can evaluate to number, but we ignore this for simplicity
     (isExpression(value) && value[0] !== "function" && value[0] !== "define");
   if (!isNumber) {
@@ -193,6 +196,21 @@ const assert = require("assert");
   } catch (e) {
     assert.equal(e.message, `Maximum call stack size exceeded`);
   }
+  // global scope
+  evaluate(
+    parse("(define pluzzz (function (x y) (+ z (+ x y))))"),
+    testEnvironment
+  );
+  try {
+    evaluate(parse("(pluzzz 1 1)"), testEnvironment);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      'Can\'t find "z" variable. Use `(define z ...)` to define it'
+    );
+  }
+  evaluate(parse("(define z 13)"), testEnvironment);
+  assert.equal(evaluate(parse("(pluzzz 2 1)"), testEnvironment), 16);
 }
 
 const environment = {};
