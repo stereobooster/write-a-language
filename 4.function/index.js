@@ -61,7 +61,12 @@ const checkArgumentIsSymbol = (name, position, value) => {
   }
 };
 
-const evaluate = (ast, environment = {}) => {
+const defaultEnvironment = {
+  "+": (x, y) => x + y,
+  "-": (x, y) => x - y
+};
+
+const evaluate = (ast, environment = { ...defaultEnvironment }) => {
   if (typeof ast === "string") {
     if (environment[ast] === undefined) {
       throw new RuntimeError(
@@ -75,86 +80,76 @@ const evaluate = (ast, environment = {}) => {
   // function call handling
   let [name, first, second] = ast;
   const numberOfArguments = ast.length - 1;
-  if (name === "+") {
-    checkNumberOfArguments(name, numberOfArguments, 2);
-    return evaluate(first, environment) + evaluate(second, environment);
-  } else if (name === "-") {
-    checkNumberOfArguments(name, numberOfArguments, 2);
-    return evaluate(first, environment) - evaluate(second, environment);
-  } else if (name === "define") {
+  if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
     if (
       environment[first] !== undefined ||
-      first === "+" ||
-      first === "-" ||
-      first === "define"
+      first === "define" ||
+      first === "function"
     ) {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
     return (environment[first] = evaluate(second, environment));
+  } else if (
+    name === "function"
+    // name === "lambda" || // classical name for anonymous function
+    // name === "λ" || // greek letter for lambda
+    // name === "\\" // a lot of keyboard misses lambda letter, so people use slash instead
+  ) {
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    const argumentNames = first;
+    const functionBody = second;
+    return (_first, _second) => {
+      const closureEnvironment = {
+        ...environment,
+        [argumentNames[0]]: _first,
+        [argumentNames[1]]: _second
+      };
+      return evaluate(functionBody, closureEnvironment);
+    };
   } else {
-    throw new RuntimeError(`"${name}" is not a function`);
+    if (typeof environment[name] === "function") {
+      return environment[name](
+        evaluate(first, environment),
+        evaluate(second, environment)
+      );
+    } else {
+      throw new RuntimeError(`"${name}" is not a function`);
+    }
   }
 };
 
 // Tests
 const assert = require("assert");
 {
-  let testEnvironment = {};
-  assert.equal(evaluate(parse("(define x 1)"), testEnvironment), 1);
-  assert.equal(testEnvironment["x"], 1);
-
-  assert.equal(evaluate(parse("(+ x x)"), { x: 1 }), 2);
-
+  let testEnvironment = { ...defaultEnvironment };
+  // "external" functions
+  assert.equal(evaluate(parse("(* 2 2)"), { "*": (x, y) => x * y }), 4);
+  // application of arguments
+  evaluate(parse("(define minus (function (x y) (- x y)))"), testEnvironment);
+  assert.equal(evaluate(parse("(minus 2 1)"), testEnvironment), 1);
+  // evaluation of arguments
+  assert.equal(evaluate(parse("(minus (+ 1 1) 1)"), testEnvironment), 1);
+  // shadow variables
+  assert.equal(evaluate(parse("(define x 10)"), testEnvironment), 10);
+  assert.equal(evaluate(parse("(minus 2 x)"), testEnvironment), -8);
+  // no type checking
+  assert(isNaN(evaluate(parse("(minus minus minus)"), testEnvironment)));
   try {
-    evaluate(parse("(+ x x)"), {});
-  } catch (e) {
-    assert.equal(
-      e.message,
-      'Can\'t find "x" variable. Use `(define x ...)` to define it'
+    // recursion
+    evaluate(
+      parse("(define recursion (function (x y) (recursion x y)))"),
+      testEnvironment
     );
-  }
-
-  try {
-    evaluate(parse("(define 1 1)"), {});
+    evaluate(parse("(recursion 1 2)"), testEnvironment);
   } catch (e) {
-    assert.equal(
-      e.message,
-      `"define" expects symbol as the first argument, instead got "1"`
-    );
+    assert.equal(e.message, `Maximum call stack size exceeded`);
   }
 
-  try {
-    evaluate(parse("(define x 1)"), { x: 1 });
-  } catch (e) {
-    assert.equal(e.message, `Can't redefine "x" variable`);
-  }
-
-  testEnvironment = { y: 1 };
-  evaluate(parse("(define x y)"), testEnvironment);
-  assert.equal(testEnvironment["x"], 1);
-
-  try {
-    evaluate(parse("(define x x)"));
-  } catch (e) {
-    assert.equal(
-      e.message,
-      'Can\'t find "x" variable. Use `(define x ...)` to define it'
-    );
-  }
-
-  try {
-    testEnvironment = {};
-    evaluate(parse("(define + 1)"), testEnvironment);
-    // we don't want this to be valid program
-    evaluate(parse("(+ + +)"), testEnvironment);
-  } catch (e) {
-    assert.equal(e.message, `Can't redefine "+" variable`);
-  }
 }
 
-const environment = {};
+const environment = { ...defaultEnvironment };
 
 // REPL
 const readline = require("readline");
