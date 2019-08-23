@@ -211,6 +211,27 @@ const assert = require("assert");
   }
   evaluate(parse("(define z 13)"), testEnvironment);
   assert.equal(evaluate(parse("(pluzzz 2 1)"), testEnvironment), 16);
+  // dynamic resolution
+  try {
+    evaluate(
+      parse(`
+      (define getFun
+        (function (x y)
+          (function (i j)
+            (- (+ x y) (+ i j))
+          )
+        )
+      )`),
+      testEnvironment
+    );
+    evaluate(parse(`(define fun (getFun 5 4))`), testEnvironment);
+    assert.equal(evaluate(parse(`(fun 3 2)`), testEnvironment), 5);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      'Can\'t find "y" variable. Use `(define y ...)` to define it'
+    );
+  }
 }
 
 const environment = {};
