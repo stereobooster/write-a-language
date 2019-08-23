@@ -137,12 +137,12 @@ const evaluate = (ast, environment = {}) => {
     checkArgumentIsNumber(name, "first", first, environment);
     checkArgumentIsNumber(name, "second", second, environment);
     const [_, argumentNames, functionBody] = environment[name];
-    const closureEnvironment = {
+    const functionEnvironment = {
       ...environment,
       [argumentNames[0]]: evaluate(first, environment),
       [argumentNames[1]]: evaluate(second, environment)
     };
-    return evaluate(functionBody, closureEnvironment);
+    return evaluate(functionBody, functionEnvironment);
   }
 };
 
