@@ -39,8 +39,11 @@ class RuntimeError extends Error {}
 class TypeError extends Error {}
 
 const isExpression = ast => Array.isArray(ast);
+
 const isList = ast => Array.isArray(ast);
-const isSymbol = ast => typeof value !== "string";
+const isSymbol = ast => typeof ast === "string";
+// function represented as list (triple) with first item function
+const isFunction = ast => isList(ast) && ast[0] === "function";
 
 const checkNumberOfArguments = (name, numberOfArguments, expected) => {
   if (numberOfArguments !== expected) {
@@ -53,7 +56,8 @@ const checkArgumentIsNumber = (name, position, value, environment) => {
   const isNumber =
     typeof value === "number" ||
     (typeof value === "string" && typeof environment[value] === "number") ||
-    (isExpression(value) && value[0] !== "define" && value[0] !== "function");
+    // define can evaluate to number, but we ignore this for simplicity
+    (isExpression(value) && value[0] !== "function" && value[0] !== "define");
   if (!isNumber) {
     throw new TypeError(
       `"${name}" expects number as the ${position} argument, instead got "${value}"`
@@ -82,12 +86,7 @@ const checkArgumentIsListOfSymbols = (name, position, value) => {
   }
 };
 
-const defaultEnvironment = {
-  "+": (x, y) => x + y,
-  "-": (x, y) => x - y
-};
-
-const evaluate = (ast, environment = { ...defaultEnvironment }) => {
+const evaluate = (ast, environment = {}) => {
   if (typeof ast === "string") {
     if (environment[ast] === undefined) {
       throw new RuntimeError(
@@ -101,58 +100,56 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
   // function call handling
   let [name, first, second] = ast;
   const numberOfArguments = ast.length - 1;
-  if (name === "define") {
+  if (name === "+") {
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    checkArgumentIsNumber(name, "first", first, environment);
+    checkArgumentIsNumber(name, "second", second, environment);
+    return evaluate(first, environment) + evaluate(second, environment);
+  } else if (name === "-") {
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    checkArgumentIsNumber(name, "first", first, environment);
+    checkArgumentIsNumber(name, "second", second, environment);
+    return evaluate(first, environment) - evaluate(second, environment);
+  } else if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
     if (
       environment[first] !== undefined ||
+      first === "+" ||
+      first === "-" ||
       first === "define" ||
       first === "function"
     ) {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
     return (environment[first] = evaluate(second, environment));
-  } else if (
-    name === "function"
-    // name === "lambda" || // classical name for anonymous function
-    // name === "λ" || // greek letter for lambda
-    // name === "\\" // a lot of keyboard misses lambda letter, so people use slash instead
-  ) {
+  } else if (name === "function") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsListOfSymbols(name, "first", first);
     checkArgumentIsList(name, "second", second);
-    const argumentNames = first;
-    const functionBody = second;
-    return (_first, _second) => {
-      const closureEnvironment = {
-        ...environment,
-        [argumentNames[0]]: _first,
-        [argumentNames[1]]: _second
-      };
-      return evaluate(functionBody, closureEnvironment);
-    };
+    return ast;
   } else {
-    if (typeof environment[name] === "function") {
-      // assume all functions expect 2 numbers
-      checkNumberOfArguments(name, numberOfArguments, 2);
-      checkArgumentIsNumber(name, "first", first, environment);
-      checkArgumentIsNumber(name, "second", second, environment);
-      return environment[name](
-        evaluate(first, environment),
-        evaluate(second, environment)
-      );
-    } else {
+    if (!isFunction(environment[name])) {
       throw new RuntimeError(`"${name}" is not a function`);
     }
+    // assume all functions expect 2 numbers
+    checkNumberOfArguments(name, numberOfArguments, 2);
+    checkArgumentIsNumber(name, "first", first, environment);
+    checkArgumentIsNumber(name, "second", second, environment);
+    const [_, argumentNames, functionBody] = environment[name];
+    const closureEnvironment = {
+      ...environment,
+      [argumentNames[0]]: evaluate(first, environment),
+      [argumentNames[1]]: evaluate(second, environment)
+    };
+    return evaluate(functionBody, closureEnvironment);
   }
 };
 
 // Tests
 const assert = require("assert");
 {
-  let testEnvironment = { ...defaultEnvironment };
-  // "external" functions
-  assert.equal(evaluate(parse("(* 2 2)"), { "*": (x, y) => x * y }), 4);
+  let testEnvironment = {};
   // application of arguments
   evaluate(parse("(define minus (function (x y) (- x y)))"), testEnvironment);
   assert.equal(evaluate(parse("(minus 2 1)"), testEnvironment), 1);
@@ -198,7 +195,7 @@ const assert = require("assert");
   }
 }
 
-const environment = { ...defaultEnvironment };
+const environment = {};
 
 // REPL
 const readline = require("readline");
