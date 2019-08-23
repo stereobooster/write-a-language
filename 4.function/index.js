@@ -39,6 +39,9 @@ class RuntimeError extends Error {}
 class TypeError extends Error {}
 
 const isExpression = ast => Array.isArray(ast);
+const isList = ast => Array.isArray(ast);
+const isSymbol = ast => typeof value !== "string";
+
 const checkNumberOfArguments = (name, numberOfArguments, expected) => {
   if (numberOfArguments !== expected) {
     throw new TypeError(
@@ -46,17 +49,35 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
     );
   }
 };
-const checkArgumentIsNumber = (name, position, value) => {
-  if (!isExpression(value) && typeof value !== "number") {
+const checkArgumentIsNumber = (name, position, value, environment) => {
+  const isNumber =
+    typeof value === "number" ||
+    (typeof value === "string" && typeof environment[value] === "number") ||
+    (isExpression(value) && value[0] !== "define" && value[0] !== "function");
+  if (!isNumber) {
     throw new TypeError(
       `"${name}" expects number as the ${position} argument, instead got "${value}"`
     );
   }
 };
 const checkArgumentIsSymbol = (name, position, value) => {
-  if (typeof value !== "string") {
+  if (!isSymbol(value)) {
     throw new TypeError(
       `"${name}" expects symbol as the ${position} argument, instead got "${value}"`
+    );
+  }
+};
+const checkArgumentIsList = (name, position, value) => {
+  if (!isList(value)) {
+    throw new TypeError(
+      `"${name}" expects list as the ${position} argument, instead got "${value}"`
+    );
+  }
+};
+const checkArgumentIsListOfSymbols = (name, position, value) => {
+  if (!isList(value) || value.some(x => !isSymbol(x))) {
+    throw new TypeError(
+      `"${name}" expects list as the ${position} argument, instead got "${value}"`
     );
   }
 };
@@ -98,6 +119,8 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     // name === "\\" // a lot of keyboard misses lambda letter, so people use slash instead
   ) {
     checkNumberOfArguments(name, numberOfArguments, 2);
+    checkArgumentIsListOfSymbols(name, "first", first);
+    checkArgumentIsList(name, "second", second);
     const argumentNames = first;
     const functionBody = second;
     return (_first, _second) => {
@@ -110,6 +133,10 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     };
   } else {
     if (typeof environment[name] === "function") {
+      // assume all functions expect 2 numbers
+      checkNumberOfArguments(name, numberOfArguments, 2);
+      checkArgumentIsNumber(name, "first", first, environment);
+      checkArgumentIsNumber(name, "second", second, environment);
       return environment[name](
         evaluate(first, environment),
         evaluate(second, environment)
@@ -134,10 +161,33 @@ const assert = require("assert");
   // shadow variables
   assert.equal(evaluate(parse("(define x 10)"), testEnvironment), 10);
   assert.equal(evaluate(parse("(minus 2 x)"), testEnvironment), -8);
-  // no type checking
-  assert(isNaN(evaluate(parse("(minus minus minus)"), testEnvironment)));
+  // type checking
   try {
-    // recursion
+    evaluate(parse("(function 1 (- x y))"), testEnvironment);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      `"function" expects list as the first argument, instead got "1"`
+    );
+  }
+  try {
+    evaluate(parse("(function (x y) 1)"), testEnvironment);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      `"function" expects list as the second argument, instead got "1"`
+    );
+  }
+  try {
+    evaluate(parse("(minus minus minus)"), testEnvironment);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      `"minus" expects number as the first argument, instead got "minus"`
+    );
+  }
+  // recursion
+  try {
     evaluate(
       parse("(define recursion (function (x y) (recursion x y)))"),
       testEnvironment
@@ -146,7 +196,6 @@ const assert = require("assert");
   } catch (e) {
     assert.equal(e.message, `Maximum call stack size exceeded`);
   }
-
 }
 
 const environment = { ...defaultEnvironment };
