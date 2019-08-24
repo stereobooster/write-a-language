@@ -191,6 +191,25 @@ const assert = require("assert");
   evaluate(parse("(define pluzzz (getPluzz))"), testEnvironment);
   evaluate(parse("(define z 13)"), testEnvironment);
   assert.equal(evaluate(parse("(pluzzz 2 1)"), testEnvironment), 16);
+  // local  scope
+  evaluate(
+    parse(`
+      (define testLocal
+        (function ()
+          (define local 10)
+        )
+      )`),
+    testEnvironment
+  );
+  assert.equal(evaluate(parse("(testLocal)"), testEnvironment), 10);
+  try {
+    assert.equal(evaluate(parse("(+ local 1)"), testEnvironment), 11);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      'Can\'t find "local" variable. Use `(define local ...)` to define it'
+    );
+  }
 }
 
 const environment = { ...defaultEnvironment };
