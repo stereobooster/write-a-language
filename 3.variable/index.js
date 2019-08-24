@@ -168,7 +168,7 @@ rl.prompt();
 rl.on("line", input => {
   try {
     if (input.trim() !== "") {
-      console.log(evaluate(parse(input), environment));
+      console.log("=", evaluate(parse(input), environment));
     }
   } catch (e) {
     console.log(e.message);

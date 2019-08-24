@@ -135,8 +135,8 @@ const evaluate = (ast, environment = {}) => {
     if (!isFunction(environment[name])) {
       throw new RuntimeError(`"${name}" is not a function`);
     }
-    // assume all functions expect 2 numbers
-    checkNumberOfArguments(name, numberOfArguments, 2);
+    checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
+    // assume all functions expect 2 numbers for simplicity
     checkArgumentIsNumber(name, "first", first, environment);
     checkArgumentIsNumber(name, "second", second, environment);
     const [_, argumentNames, functionBody] = environment[name];
@@ -245,10 +245,15 @@ const rl = readline.createInterface({
 });
 rl.prompt();
 
+const prettyPrinter = res =>
+  isFunction(res)
+    ? `(function (${res[1].join(" ")}) (${res[2].join(" ")}))`
+    : res;
+
 rl.on("line", input => {
   try {
     if (input.trim() !== "") {
-      console.log(evaluate(parse(input), environment));
+      console.log("=", prettyPrinter(evaluate(parse(input), environment)));
     }
   } catch (e) {
     console.log(e.message);
