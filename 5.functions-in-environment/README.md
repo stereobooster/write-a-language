@@ -1,4 +1,4 @@
-# Calcy + native functions
+# Calcy
 
 To run CLI REPL
 
