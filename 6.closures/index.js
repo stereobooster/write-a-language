@@ -107,7 +107,7 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     return ast;
   }
   // function call handling
-  let [name, first, second] = ast;
+  const [name, first, second] = ast;
   const numberOfArguments = ast.length - 1;
   if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
@@ -127,8 +127,8 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     return [...ast, environment];
   } else {
     if (isNativeFunction(environment[name])) {
+      checkNumberOfArguments(name, numberOfArguments, environment[name].length);
       // assume all functions expect 2 numbers
-      checkNumberOfArguments(name, numberOfArguments, 2);
       checkArgumentIsNumber(name, "first", first, environment);
       checkArgumentIsNumber(name, "second", second, environment);
       return environment[name](
@@ -137,17 +137,19 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
       );
     }
     if (isFunction(environment[name])) {
-      const [_, argumentNames, functionBody, closureEnvironment] = environment[name];
+      const [_, argumentNames, functionBody, closureEnvironment] = environment[
+        name
+      ];
       checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
-      // assume all functions expect 2 numbers for simplicity
-      checkArgumentIsNumber(name, "first", first, environment);
-      checkArgumentIsNumber(name, "second", second, environment);
-      const functionEnvironment = {
-        // ...environment,
-        ...closureEnvironment,
-        [argumentNames[0]]: evaluate(first, environment),
-        [argumentNames[1]]: evaluate(second, environment)
-      };
+      const functionEnvironment = { ...environment, ...closureEnvironment };
+      for (let i = 0; i < argumentNames.length; i++) {
+        const argumentValue = ast[i + 1];
+        checkArgumentIsNumber(name, `${i + 1}`, argumentValue, environment);
+        functionEnvironment[argumentNames[i]] = evaluate(
+          argumentValue,
+          environment
+        );
+      }
       return evaluate(functionBody, functionEnvironment);
     }
     throw new RuntimeError(`"${name}" is not a function`);
@@ -174,6 +176,19 @@ const assert = require("assert");
   );
   evaluate(parse(`(define fun (getFun 5 4))`), testEnvironment);
   assert.equal(evaluate(parse(`(fun 3 2)`), testEnvironment), 4);
+  // global variable defined after function
+  evaluate(
+    parse(`
+      (define getPluzz
+        (function ()
+          (function (x y) (+ z (+ x y)))
+        )
+      )`),
+    testEnvironment
+  );
+  evaluate(parse("(define pluzzz (getPluzz))"), testEnvironment);
+  evaluate(parse("(define z 13)"), testEnvironment);
+  assert.equal(evaluate(parse("(pluzzz 2 1)"), testEnvironment), 16);
 }
 
 const environment = { ...defaultEnvironment };
