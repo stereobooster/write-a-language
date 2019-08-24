@@ -128,13 +128,13 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
   } else {
     if (isNativeFunction(environment[name])) {
       checkNumberOfArguments(name, numberOfArguments, environment[name].length);
-      // assume all functions expect 2 numbers
-      checkArgumentIsNumber(name, "first", first, environment);
-      checkArgumentIsNumber(name, "second", second, environment);
-      return environment[name](
-        evaluate(first, environment),
-        evaluate(second, environment)
-      );
+      const evaluatedArguments = [];
+      for (let i = 0; i < environment[name].length; i++) {
+        const argumentValue = ast[i + 1];
+        checkArgumentIsNumber(name, `${i + 1}`, argumentValue, environment);
+        evaluatedArguments[i] = evaluate(argumentValue, environment);
+      }
+      return environment[name](...evaluatedArguments);
     }
     if (isFunction(environment[name])) {
       const [_, argumentNames, functionBody, closureEnvironment] = environment[
@@ -159,6 +159,8 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
 // Tests
 const assert = require("assert");
 {
+  // single argument
+  assert.equal(evaluate(parse("(id 1)"), { id: x => x }), 1);
   let testEnvironment = { ...defaultEnvironment };
   // sanity check
   assert.equal(evaluate(parse("(- 2 1)"), testEnvironment), 1);
