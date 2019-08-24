@@ -44,6 +44,7 @@ const isList = ast => Array.isArray(ast);
 const isSymbol = ast => typeof ast === "string";
 // function represented as list (triple) with first item function
 const isFunction = ast => isList(ast) && ast[0] === "function";
+const isNativeFunction = ast => typeof ast === "function";
 
 const checkNumberOfArguments = (name, numberOfArguments, expected) => {
   if (numberOfArguments !== expected) {
@@ -89,7 +90,12 @@ const checkArgumentIsListOfSymbols = (name, position, value) => {
   }
 };
 
-const evaluate = (ast, environment = {}) => {
+const defaultEnvironment = {
+  "+": (a, b) => a + b,
+  "-": (a, b) => a - b
+};
+
+const evaluate = (ast, environment = { ...defaultEnvironment }) => {
   if (typeof ast === "string") {
     if (environment[ast] === undefined) {
       throw new RuntimeError(
@@ -103,23 +109,11 @@ const evaluate = (ast, environment = {}) => {
   // function call handling
   let [name, first, second] = ast;
   const numberOfArguments = ast.length - 1;
-  if (name === "+") {
-    checkNumberOfArguments(name, numberOfArguments, 2);
-    checkArgumentIsNumber(name, "first", first, environment);
-    checkArgumentIsNumber(name, "second", second, environment);
-    return evaluate(first, environment) + evaluate(second, environment);
-  } else if (name === "-") {
-    checkNumberOfArguments(name, numberOfArguments, 2);
-    checkArgumentIsNumber(name, "first", first, environment);
-    checkArgumentIsNumber(name, "second", second, environment);
-    return evaluate(first, environment) - evaluate(second, environment);
-  } else if (name === "define") {
+  if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
     if (
       environment[first] !== undefined ||
-      first === "+" ||
-      first === "-" ||
       first === "define" ||
       first === "function"
     ) {
@@ -132,109 +126,44 @@ const evaluate = (ast, environment = {}) => {
     checkArgumentIsList(name, "second", second);
     return ast;
   } else {
-    if (!isFunction(environment[name])) {
-      throw new RuntimeError(`"${name}" is not a function`);
+    if (isNativeFunction(environment[name])) {
+      // assume all functions expect 2 numbers
+      checkNumberOfArguments(name, numberOfArguments, 2);
+      checkArgumentIsNumber(name, "first", first, environment);
+      checkArgumentIsNumber(name, "second", second, environment);
+      return environment[name](
+        evaluate(first, environment),
+        evaluate(second, environment)
+      );
     }
-    const [_, argumentNames, functionBody] = environment[name];
-    checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
-    // assume all functions expect 2 numbers for simplicity
-    checkArgumentIsNumber(name, "first", first, environment);
-    checkArgumentIsNumber(name, "second", second, environment);
-    const functionEnvironment = {
-      ...environment,
-      [argumentNames[0]]: evaluate(first, environment),
-      [argumentNames[1]]: evaluate(second, environment)
-    };
-    return evaluate(functionBody, functionEnvironment);
+    if (isFunction(environment[name])) {
+      const [_, argumentNames, functionBody] = environment[name];
+      checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
+      // assume all functions expect 2 numbers for simplicity
+      checkArgumentIsNumber(name, "first", first, environment);
+      checkArgumentIsNumber(name, "second", second, environment);
+      const functionEnvironment = {
+        ...environment,
+        [argumentNames[0]]: evaluate(first, environment),
+        [argumentNames[1]]: evaluate(second, environment)
+      };
+      return evaluate(functionBody, functionEnvironment);
+    }
+    throw new RuntimeError(`"${name}" is not a function`);
   }
 };
 
 // Tests
 const assert = require("assert");
 {
-  let testEnvironment = {};
-  // application of arguments
-  evaluate(parse("(define minus (function (x y) (- x y)))"), testEnvironment);
-  assert.equal(evaluate(parse("(minus 2 1)"), testEnvironment), 1);
-  // evaluation of arguments
-  assert.equal(evaluate(parse("(minus (+ 1 1) 1)"), testEnvironment), 1);
-  // shadow variables
-  assert.equal(evaluate(parse("(define x 10)"), testEnvironment), 10);
-  assert.equal(evaluate(parse("(minus 2 x)"), testEnvironment), -8);
-  // type checking
-  try {
-    evaluate(parse("(function 1 (- x y))"), testEnvironment);
-  } catch (e) {
-    assert.equal(
-      e.message,
-      `"function" expects list as the first argument, instead got "1"`
-    );
-  }
-  try {
-    evaluate(parse("(function (x y) 1)"), testEnvironment);
-  } catch (e) {
-    assert.equal(
-      e.message,
-      `"function" expects list as the second argument, instead got "1"`
-    );
-  }
-  try {
-    evaluate(parse("(minus minus minus)"), testEnvironment);
-  } catch (e) {
-    assert.equal(
-      e.message,
-      `"minus" expects number as the first argument, instead got "minus"`
-    );
-  }
-  // recursion
-  try {
-    evaluate(
-      parse("(define recursion (function (x y) (recursion x y)))"),
-      testEnvironment
-    );
-    evaluate(parse("(recursion 1 2)"), testEnvironment);
-  } catch (e) {
-    assert.equal(e.message, `Maximum call stack size exceeded`);
-  }
-  // global scope
-  evaluate(
-    parse("(define pluzzz (function (x y) (+ z (+ x y))))"),
-    testEnvironment
-  );
-  try {
-    evaluate(parse("(pluzzz 1 1)"), testEnvironment);
-  } catch (e) {
-    assert.equal(
-      e.message,
-      'Can\'t find "z" variable. Use `(define z ...)` to define it'
-    );
-  }
-  evaluate(parse("(define z 13)"), testEnvironment);
-  assert.equal(evaluate(parse("(pluzzz 2 1)"), testEnvironment), 16);
-  // dynamic resolution
-  try {
-    evaluate(
-      parse(`
-      (define getFun
-        (function (x y)
-          (function (i j)
-            (- (+ x y) (+ i j))
-          )
-        )
-      )`),
-      testEnvironment
-    );
-    evaluate(parse(`(define fun (getFun 5 4))`), testEnvironment);
-    assert.equal(evaluate(parse(`(fun 3 2)`), testEnvironment), 5);
-  } catch (e) {
-    assert.equal(
-      e.message,
-      'Can\'t find "y" variable. Use `(define y ...)` to define it'
-    );
-  }
+  let testEnvironment = { ...defaultEnvironment };
+  // built-in functions
+  assert.equal(evaluate(parse("(+ 2 1)"), testEnvironment), 3);
+  // external functions
+  assert.equal(evaluate(parse("(* 2 2)"), { "*": (x, y) => x * y }), 4);
 }
 
-const environment = {};
+const environment = { ...defaultEnvironment };
 
 // REPL
 const readline = require("readline");
