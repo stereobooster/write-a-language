@@ -52,21 +52,23 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
     );
   }
 };
+
+const prettyPrinter = res =>
+  isFunction(res)
+    ? `(function (${res[1].join(" ")}) (${res[2].join(" ")}))`
+    : res;
+
 const checkArgumentIsNumber = (name, position, value, environment) => {
-  const isNumber =
-    typeof value === "number" ||
-    (typeof value === "string" &&
-      (typeof environment[value] === "number" ||
-        // ignore undefined because it will throw exception later
-        typeof environment[value] === "undefined")) ||
-    // define can evaluate to number, but we ignore this for simplicity
-    (isExpression(value) && value[0] !== "function" && value[0] !== "define");
+  const isNumber = typeof value === "number";
   if (!isNumber) {
     throw new TypeError(
-      `"${name}" expects number as the ${position} argument, instead got "${value}"`
+      `"${name}" expects number as the ${position} argument, instead got "${prettyPrinter(
+        value
+      )}"`
     );
   }
 };
+
 const checkArgumentIsSymbol = (name, position, value) => {
   if (!isSymbol(value)) {
     throw new TypeError(
@@ -105,14 +107,18 @@ const evaluate = (ast, environment = {}) => {
   const numberOfArguments = ast.length - 1;
   if (name === "+") {
     checkNumberOfArguments(name, numberOfArguments, 2);
+    first = evaluate(first, environment);
+    second = evaluate(second, environment);
     checkArgumentIsNumber(name, "first", first, environment);
     checkArgumentIsNumber(name, "second", second, environment);
-    return evaluate(first, environment) + evaluate(second, environment);
+    return first + second;
   } else if (name === "-") {
     checkNumberOfArguments(name, numberOfArguments, 2);
+    first = evaluate(first, environment);
+    second = evaluate(second, environment);
     checkArgumentIsNumber(name, "first", first, environment);
     checkArgumentIsNumber(name, "second", second, environment);
-    return evaluate(first, environment) - evaluate(second, environment);
+    return first - second;
   } else if (name === "define") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsSymbol(name, "first", first);
@@ -137,13 +143,15 @@ const evaluate = (ast, environment = {}) => {
     }
     const [_, argumentNames, functionBody] = environment[name];
     checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
+    first = evaluate(first, environment);
+    second = evaluate(second, environment);
     // assume all functions expect 2 numbers for simplicity
     checkArgumentIsNumber(name, "first", first, environment);
     checkArgumentIsNumber(name, "second", second, environment);
     const functionEnvironment = {
       ...environment,
-      [argumentNames[0]]: evaluate(first, environment),
-      [argumentNames[1]]: evaluate(second, environment)
+      [argumentNames[0]]: first,
+      [argumentNames[1]]: second
     };
     return evaluate(functionBody, functionEnvironment);
   }
@@ -183,7 +191,7 @@ const assert = require("assert");
   } catch (e) {
     assert.equal(
       e.message,
-      `"minus" expects number as the first argument, instead got "minus"`
+      `"minus" expects number as the first argument, instead got "(function (x y) (- x y))"`
     );
   }
   // recursion
@@ -244,11 +252,6 @@ const rl = readline.createInterface({
   prompt: "calcy> "
 });
 rl.prompt();
-
-const prettyPrinter = res =>
-  isFunction(res)
-    ? `(function (${res[1].join(" ")}) (${res[2].join(" ")}))`
-    : res;
 
 rl.on("line", input => {
   try {

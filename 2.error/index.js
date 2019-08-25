@@ -71,7 +71,7 @@ const evaluate = ast => {
   if (name === "+") {
     if (numberOfArguments !== 2) {
       throw new TypeError(
-        `"${name}" needs 2 arguments, instead got ${numberOfArguments}`
+        `"${name}" expects 2 arguments, instead got ${numberOfArguments}`
       );
     }
     if (!isExpression(first) && typeof first !== "number") {

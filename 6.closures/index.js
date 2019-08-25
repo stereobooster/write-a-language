@@ -53,14 +53,23 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
     );
   }
 };
-const checkArgumentIsNumber = (name, position, value) => {
+
+const prettyPrinter = res =>
+  isFunction(res)
+    ? `(function (${res[1].join(" ")}) (${res[2].join(" ")}))`
+    : res;
+
+const checkArgumentIsNumber = (name, position, value, environment) => {
   const isNumber = typeof value === "number";
   if (!isNumber) {
     throw new TypeError(
-      `"${name}" expects number as the ${position} argument, instead got "${value}"`
+      `"${name}" expects number as the ${position} argument, instead got "${prettyPrinter(
+        value
+      )}"`
     );
   }
 };
+
 const checkArgumentIsSymbol = (name, position, value) => {
   if (!isSymbol(value)) {
     throw new TypeError(
@@ -220,11 +229,6 @@ const rl = readline.createInterface({
   prompt: "calcy> "
 });
 rl.prompt();
-
-const prettyPrinter = res =>
-  isFunction(res)
-    ? `(function (${res[1].join(" ")}) (${res[2].join(" ")}))`
-    : res;
 
 rl.on("line", input => {
   try {

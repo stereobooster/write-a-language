@@ -46,13 +46,7 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
     );
   }
 };
-const checkArgumentIsNumber = (name, position, value) => {
-  if (!isExpression(value) && typeof value !== "number") {
-    throw new TypeError(
-      `"${name}" expects number as the ${position} argument, instead got "${value}"`
-    );
-  }
-};
+
 const checkArgumentIsSymbol = (name, position, value) => {
   if (typeof value !== "string") {
     throw new TypeError(
