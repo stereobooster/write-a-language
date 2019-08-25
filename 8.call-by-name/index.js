@@ -258,7 +258,7 @@ const assert = require("assert");
   try {
     evaluate(
       parse(`
-        (define almost-factorial-error
+        (define factorial-error (Y
           (function (fact)
             (function (n)
               (if (< n 2)
@@ -267,11 +267,7 @@ const assert = require("assert");
               )
             )
           )
-        )`),
-      testEnvironment
-    );
-    evaluate(
-      parse("(define factorial-error (Y almost-factorial-error))"),
+        ))`),
       testEnvironment
     );
     const factorialFive = evaluate(
@@ -285,7 +281,7 @@ const assert = require("assert");
   // it does work with call-by-name
   evaluate(
     parse(`
-      (define almost-factorial
+      (define factorial (Y
         (callByName (fact)
           (function (n)
             (if (< n 2)
@@ -294,10 +290,9 @@ const assert = require("assert");
             )
           )
         )
-      )`),
+      ))`),
     testEnvironment
   );
-  evaluate(parse("(define factorial (Y almost-factorial))"), testEnvironment);
   const factorialFive = evaluate(parse("(factorial 5)"), testEnvironment);
   assert.equal(factorialFive, 120);
 }
