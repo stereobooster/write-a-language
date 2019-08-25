@@ -53,15 +53,8 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
     );
   }
 };
-const checkArgumentIsNumber = (name, position, value, environment) => {
-  const isNumber =
-    typeof value === "number" ||
-    (typeof value === "string" &&
-      (typeof environment[value] === "number" ||
-        // ignore undefined because it will throw exception later
-        typeof environment[value] === "undefined")) ||
-    // define can evaluate to number, but we ignore this for simplicity
-    (isExpression(value) && value[0] !== "function" && value[0] !== "define");
+const checkArgumentIsNumber = (name, position, value) => {
+  const isNumber = typeof value === "number";
   if (!isNumber) {
     throw new TypeError(
       `"${name}" expects number as the ${position} argument, instead got "${value}"`
@@ -129,23 +122,24 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     if (isNativeFunction(environment[name])) {
       // assume all functions expect 2 numbers
       checkNumberOfArguments(name, numberOfArguments, 2);
-      checkArgumentIsNumber(name, "first", first, environment);
-      checkArgumentIsNumber(name, "second", second, environment);
-      return environment[name](
-        evaluate(first, environment),
-        evaluate(second, environment)
-      );
+      first = evaluate(first, environment);
+      second = evaluate(second, environment);
+      checkArgumentIsNumber(name, "first", first);
+      checkArgumentIsNumber(name, "second", second);
+      return environment[name](first, second);
     }
     if (isFunction(environment[name])) {
       const [_, argumentNames, functionBody] = environment[name];
       checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
       // assume all functions expect 2 numbers for simplicity
-      checkArgumentIsNumber(name, "first", first, environment);
-      checkArgumentIsNumber(name, "second", second, environment);
+      first = evaluate(first, environment);
+      second = evaluate(second, environment);
+      checkArgumentIsNumber(name, "first", first);
+      checkArgumentIsNumber(name, "second", second);
       const functionEnvironment = {
         ...environment,
-        [argumentNames[0]]: evaluate(first, environment),
-        [argumentNames[1]]: evaluate(second, environment)
+        [argumentNames[0]]: first,
+        [argumentNames[1]]: second
       };
       return evaluate(functionBody, functionEnvironment);
     }
@@ -161,6 +155,14 @@ const assert = require("assert");
   assert.equal(evaluate(parse("(+ 2 1)"), testEnvironment), 3);
   // external functions
   assert.equal(evaluate(parse("(* 2 2)"), { "*": (x, y) => x * y }), 4);
+  try {
+    evaluate(parse("(- - -)"));
+  } catch (e) {
+    assert.equal(
+      e.message,
+      '"-" expects number as the first argument, instead got "(a, b) => a - b"'
+    );
+  }
 }
 
 const environment = { ...defaultEnvironment };

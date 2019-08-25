@@ -108,7 +108,8 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     if (
       environment[first] !== undefined ||
       first === "define" ||
-      first === "function"
+      first === "function" ||
+      first === "quote"
     ) {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
@@ -118,6 +119,10 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     checkArgumentIsListOfSymbols(name, "first", first);
     checkArgumentIsList(name, "second", second);
     return [...ast, environment];
+  } else if (name === "quote") {
+    checkNumberOfArguments(name, numberOfArguments, 1);
+    checkArgumentIsList(name, "first", first);
+    return first;
   } else {
     if (isNativeFunction(environment[name])) {
       checkNumberOfArguments(name, numberOfArguments, environment[name].length);
@@ -149,55 +154,15 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
 // Tests
 const assert = require("assert");
 {
-  // single argument
-  assert.equal(evaluate(parse("(id 1)"), { id: x => x }), 1);
-  let testEnvironment = { ...defaultEnvironment };
-  // sanity check
-  assert.equal(evaluate(parse("(- 2 1)"), testEnvironment), 1);
-  // closures
-  evaluate(
-    parse(`
-      (define getFun
-        (function (x y)
-          (function (i j)
-            (- (+ x y) (+ i j))
-          )
-        )
-      )`),
-    testEnvironment
-  );
-  evaluate(parse(`(define fun (getFun 5 4))`), testEnvironment);
-  assert.equal(evaluate(parse(`(fun 3 2)`), testEnvironment), 4);
-  // global variable defined after function
-  evaluate(
-    parse(`
-      (define getPluzz
-        (function ()
-          (function (x y) (+ z (+ x y)))
-        )
-      )`),
-    testEnvironment
-  );
-  evaluate(parse("(define pluzzz (getPluzz))"), testEnvironment);
-  evaluate(parse("(define z 13)"), testEnvironment);
-  assert.equal(evaluate(parse("(pluzzz 2 1)"), testEnvironment), 16);
-  // local  scope
-  evaluate(
-    parse(`
-      (define testLocal
-        (function ()
-          (define local 10)
-        )
-      )`),
-    testEnvironment
-  );
-  assert.equal(evaluate(parse("(testLocal)"), testEnvironment), 10);
+  const list = evaluate(parse("(quote (1))"));
+  assert.equal(list.length, 1);
+  assert.equal(list[0], 1);
   try {
-    assert.equal(evaluate(parse("(+ local 1)"), testEnvironment), 11);
+    evaluate(parse("(- - -)"));
   } catch (e) {
     assert.equal(
       e.message,
-      'Can\'t find "local" variable. Use `(define local ...)` to define it'
+      `"-" expects number as the 1 argument, instead got "(a, b) => a - b"`
     );
   }
 }
