@@ -35,10 +35,7 @@ const tokens_to_ast = (tokens, subcall = false) => {
 };
 
 class RuntimeError extends Error {}
-
 class TypeError extends Error {}
-
-const isExpression = ast => Array.isArray(ast);
 
 const isList = ast => Array.isArray(ast);
 const isSymbol = ast => typeof ast === "string";

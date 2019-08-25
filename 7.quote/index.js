@@ -35,10 +35,7 @@ const tokens_to_ast = (tokens, subcall = false) => {
 };
 
 class RuntimeError extends Error {}
-
 class TypeError extends Error {}
-
-const isExpression = ast => Array.isArray(ast);
 
 const isList = ast => Array.isArray(ast);
 const isSymbol = ast => typeof ast === "string";
@@ -166,6 +163,7 @@ const assert = require("assert");
   const list = evaluate(parse("(quote (1))"));
   assert.equal(list.length, 1);
   assert.equal(list[0], 1);
+  // sanity check
   try {
     evaluate(parse("(- - -)"));
   } catch (e) {
