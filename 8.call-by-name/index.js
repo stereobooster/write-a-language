@@ -180,11 +180,14 @@ const assert = require("assert");
     "<": (a, b) => (a < b ? "true" : "false"),
     "*": (a, b) => a * b
   };
+
+  // we use `'` to denote that the variable isn't evaluated
+
   //
   // quote
   //
 
-  evaluate(parse("(define quote (callByName (x) x))"), testEnvironment);
+  evaluate(parse("(define quote (callByName (x') x'))"), testEnvironment);
   const list = evaluate(parse("(quote (1))"), testEnvironment);
   assert.equal(list.length, 1);
   assert.equal(list[0], 1);
@@ -194,13 +197,18 @@ const assert = require("assert");
   //
 
   evaluate(
-    parse("(define true  (callByName (x y) (evaluate x)))"),
+    parse("(define true  (callByName (x' y') (evaluate x')))"),
     testEnvironment
   );
   evaluate(
-    parse("(define false (callByName (x y) (evaluate y)))"),
+    parse("(define false (callByName (x' y') (evaluate y')))"),
     testEnvironment
   );
+  evaluate(
+    parse("(define less (callByName (x' y') (evaluate (< x' y'))))"),
+    testEnvironment
+  );
+
   // it doesn't work with call-by-value
   try {
     evaluate(
@@ -227,16 +235,17 @@ const assert = require("assert");
   // it does work with call-by-name
   evaluate(
     parse(`
-      (define if (callByName (condition then else)
-        ((evaluate (evaluate condition))
-          (evaluate then)
-          (evaluate else)
+      (define if (callByName (condition' then' else')
+        (
+          (evaluate condition')
+          (evaluate then')
+          (evaluate else')
         )
       ))`),
     testEnvironment
   );
   const result = evaluate(
-    parse("(if (< 2 1) unknownVariable 100)"),
+    parse("(if (less 2 1) (unknownVariable) (+ 99 1))"),
     testEnvironment
   );
   assert.equal(result, 100);
@@ -248,8 +257,8 @@ const assert = require("assert");
   evaluate(
     parse(`
       (define Y
-        (function (f)
-          (f (Y f))
+        (callByName (f')
+          ((evaluate f') (Y f'))
         )
       )`),
     testEnvironment
@@ -282,11 +291,11 @@ const assert = require("assert");
   evaluate(
     parse(`
       (define factorial (Y
-        (callByName (fact)
+        (callByName (fact')
           (function (n)
-            (if (< n 2)
+            (if (less n 2)
               1
-              (* n ((evaluate fact) (- n 1)))
+              (* n ((evaluate fact') (- n 1)))
             )
           )
         )

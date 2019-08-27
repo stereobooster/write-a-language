@@ -131,6 +131,14 @@ const defaultEnvironment = {
   "-": (a, b) => a - b
 };
 
+const exhaustiveEvaluate = (ast, environment, depth) => {
+  let result = evaluate(ast, environment, depth + 1);
+  while (isLazy(result)) {
+    result = evaluate(result, environment, depth + 1);
+  }
+  return result;
+};
+
 const evaluate = (ast, environment = { ...defaultEnvironment }, depth = 0) => {
   // stack trace for debugging
   // printStack(ast, environment, depth);
@@ -165,26 +173,19 @@ const evaluate = (ast, environment = { ...defaultEnvironment }, depth = 0) => {
     // checkArgumentIsList(name, "second", second);
     return [...ast, environment];
   } else if (name === "lazy") {
-    // return evaluate(first, second, depth + 1);
-    let result = evaluate(first, second, depth + 1);
-    while (isLazy(result)) {
-      result = evaluate(result, environment, depth + 1);
-    }
-    return result;
+    return exhaustiveEvaluate(first, second, depth + 1);
   } else {
-    let func = isSymbol(name)
-      ? environment[name]
-      : evaluate(name, environment, depth + 1);
-
-    if (isLazy(func)) {
-      func = evaluate(func, environment, depth + 1);
-    }
+    const func = exhaustiveEvaluate(name, environment, depth + 1);
 
     if (isNativeFunction(func)) {
       checkNumberOfArguments(name, numberOfArguments, func.length);
       const evaluatedArguments = [];
       for (let i = 0; i < func.length; i++) {
-        const evaluatedValue = evaluate(ast[i + 1], environment, depth + 1);
+        const evaluatedValue = exhaustiveEvaluate(
+          ast[i + 1],
+          environment,
+          depth + 1
+        );
         evaluatedArguments[i] = evaluatedValue;
       }
       return func(...evaluatedArguments);
@@ -205,11 +206,11 @@ const evaluate = (ast, environment = { ...defaultEnvironment }, depth = 0) => {
         ...closureEnvironment,
         ...functionEnvironment
       };
-      let result = evaluate(functionBody, functionEnvironment, depth + 1);
-      if (depth === 0 && isLazy(result)) {
-        result = evaluate(result, environment, depth + 1);
+      if (depth === 0) {
+        return exhaustiveEvaluate(functionBody, functionEnvironment, depth + 1);
+      } else {
+        return evaluate(functionBody, functionEnvironment, depth + 1);
       }
-      return result;
     }
     throw new RuntimeError(
       `"${isSymbol(name) ? name : func}" (${func}) is not a function`
@@ -268,10 +269,12 @@ const assert = require("assert");
       (define factorial (Y
         (function (fact)
           (function (n)
-            (if (less n 2)
-              (+ 1 0)
-              (* n (fact (- n 1)))
-            )
+
+              (if (less n 2)
+                (+ 1 0)
+                (* n (fact (- n 1)))
+              )
+
           )
         )
       ))`),
