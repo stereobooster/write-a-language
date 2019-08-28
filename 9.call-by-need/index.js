@@ -54,6 +54,11 @@ const lazyEvaluate = (ast, environment, depth) => {
   if (isLazy(ast)) return ast;
   // if we get expression return lazy computation
   if (isExpression(ast)) return ["lazy", ast, environment];
+  // special case
+  //   if symbol is not defined yet, we postpone evaluation to make it behave more "lazy"
+  //   if it won't be defined at the moment of "exhaustiveEvaluate" it will result in error
+  if (isSymbol(ast) && environment[ast] === undefined)
+    return ["lazy", ast, environment];
   // sanity check
   if (!(isSymbol(ast) || isNumber(ast) || isFunction(ast)) && isExpression(ast))
     throw new Error("We don't expect this");
@@ -231,10 +236,13 @@ const assert = require("assert");
   // if
   //
 
-  evaluate(parse("(define true  (function (x y) x))"), testEnvironment);
-  evaluate(parse("(define false (function (x y) y))"), testEnvironment);
+  // true ≡ λa.λb.a
+  evaluate(parse("(define true  (function (tx ty) tx))"), testEnvironment);
+  // false ≡ λa.λb.b
+  evaluate(parse("(define false (function (fx fy) fy))"), testEnvironment);
+  // we need to use evaluate here because we don't have interop with "native functions"
   evaluate(
-    parse("(define less (function (x y) (evaluate (< x y))))"),
+    parse("(define less (function (a b) (evaluate (< a b))))"),
     testEnvironment
   );
   evaluate(
@@ -245,8 +253,15 @@ const assert = require("assert");
       ))`),
     testEnvironment
   );
-  const result = evaluate(
-    parse("(if (less 2 1) (+ 1 unknownVariable) (+ 1 99))"),
+  // values work
+  let result = evaluate(
+    parse("(if (less 2 1) unknownVariable 100)"),
+    testEnvironment
+  );
+  assert.equal(result, 100);
+  // expression works
+  result = evaluate(
+    parse("(if (less 2 1) (unknownVariable) (+ 99 1))"),
     testEnvironment
   );
   assert.equal(result, 100);
@@ -269,12 +284,10 @@ const assert = require("assert");
       (define factorial (Y
         (function (fact)
           (function (n)
-
-              (if (less n 2)
-                (+ 1 0)
-                (* n (fact (- n 1)))
-              )
-
+            (if (less n 2)
+              (+ 1 0)
+              (* n (fact (- n 1)))
+            )
           )
         )
       ))`),
