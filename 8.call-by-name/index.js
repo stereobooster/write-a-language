@@ -37,12 +37,45 @@ const tokens_to_ast = (tokens, subcall = false) => {
 class RuntimeError extends Error {}
 class TypeError extends Error {}
 
-const isList = ast => Array.isArray(ast);
+const isNumber = ast => typeof value === "number";
 const isSymbol = ast => typeof ast === "string";
-// function represented as list (triple) with first item function
-const isFunction = ast => isList(ast) && ast[0] === "function";
+const isAtom = ast => isNumber(ast) || isSymbol(ast);
+const isList = ast => Array.isArray(ast);
+// detects function value, but not function expression
+const isFunction = ast =>
+  isList(ast) && ast[0] === "function" && ast.length === 4;
 const isNativeFunction = ast => typeof ast === "function";
 const isCallByNameFunction = ast => isList(ast) && ast[0] === "callByName";
+// lazy computation
+const isLazy = ast => isList(ast) && ast[0] === "lazy";
+
+const prettyPrinter = (ast, environment = {}) => {
+  if (isFunction(ast)) {
+    return `F(${prettyPrinter(ast[1])} …)`;
+  } else if (isCallByNameFunction(ast)) {
+    return `N(${prettyPrinter(ast[1])} …)`;
+  } else if (isSymbol(ast)) {
+    if (isAtom(environment[ast])) {
+      return `${ast}=${environment[ast]}`;
+    } else if (isNativeFunction(environment[ast])) {
+      return ast;
+    } else if (environment[ast] !== undefined) {
+      return `${ast}=${prettyPrinter(environment[ast], environment)}`;
+    } else {
+      return ast;
+    }
+  } else if (isLazy(ast)) {
+    return `L${prettyPrinter(ast[1])}`;
+  } else if (isList(ast)) {
+    return `(${ast.map(x => prettyPrinter(x, environment)).join(" ")})`;
+  } else {
+    return ast;
+  }
+};
+
+const printStack = (ast, environment, depth) =>
+  // stack trace for debugging
+  console.log(`${"  ".repeat(depth)}${prettyPrinter(ast, environment)}`);
 
 const checkNumberOfArguments = (name, numberOfArguments, expected) => {
   if (numberOfArguments !== expected) {
@@ -51,12 +84,6 @@ const checkNumberOfArguments = (name, numberOfArguments, expected) => {
     );
   }
 };
-
-const prettyPrinter = res =>
-  isFunction(res)
-    ? `(function (${res[1].join(" ")}) (${res[2].join(" ")}))`
-    : res;
-
 const checkArgumentIsNumber = (name, position, value, environment) => {
   const isNumber = typeof value === "number";
   if (!isNumber) {
@@ -67,7 +94,6 @@ const checkArgumentIsNumber = (name, position, value, environment) => {
     );
   }
 };
-
 const checkArgumentIsSymbol = (name, position, value) => {
   if (!isSymbol(value)) {
     throw new TypeError(
@@ -95,8 +121,28 @@ const defaultEnvironment = {
   "-": (a, b) => a - b
 };
 
-const evaluate = (ast, environment = { ...defaultEnvironment }) => {
-  environment["evaluate"] = body => evaluate(body, environment);
+const isExpression = ast => isList(ast) && !isFunction(ast);
+
+const lazyEvaluate = (ast, environment, depth) => {
+  // if we get lazy computation return it
+  if (isLazy(ast)) return ast;
+  // if we get expression return lazy computation
+  if (isExpression(ast)) return ["lazy", ast, environment];
+  // special case
+  //   if symbol is not defined yet, we postpone evaluation to make it behave more "lazy"
+  //   if it won't be defined at the moment of "evaluate" it will result in error
+  if (isSymbol(ast) && environment[ast] === undefined)
+    return ["lazy", ast, environment];
+  // sanity check
+  if (!(isSymbol(ast) || isNumber(ast) || isFunction(ast)) && isExpression(ast))
+    throw new Error("We don't expect this");
+  return evaluate(ast, environment, depth);
+};
+
+const evaluate = (ast, environment = { ...defaultEnvironment }, depth = 0) => {
+  // stack trace for debugging
+  // printStack(ast, environment, depth);
+  environment["evaluate"] = body => evaluate(body, environment, depth + 1);
   if (typeof ast === "string") {
     if (environment[ast] === undefined) {
       throw new RuntimeError(
@@ -120,7 +166,7 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     ) {
       throw new RuntimeError(`Can't redefine "${first}" variable`);
     }
-    return (environment[first] = evaluate(second, environment));
+    return (environment[first] = evaluate(second, environment, depth + 1));
   } else if (name === "function") {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsListOfSymbols(name, "first", first);
@@ -130,15 +176,15 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
     checkNumberOfArguments(name, numberOfArguments, 2);
     checkArgumentIsListOfSymbols(name, "first", first);
     return [...ast, environment];
+  } else if (name === "lazy") {
+    return evaluate(first, second, depth + 1);
   } else {
-    const func = isSymbol(name)
-      ? environment[name]
-      : evaluate(name, environment);
+    const func = evaluate(name, environment, depth + 1);
     if (isNativeFunction(func)) {
       checkNumberOfArguments(name, numberOfArguments, func.length);
       const evaluatedArguments = [];
       for (let i = 0; i < func.length; i++) {
-        const evaluatedValue = evaluate(ast[i + 1], environment);
+        const evaluatedValue = evaluate(ast[i + 1], environment, depth + 1);
         // checkArgumentIsNumber(name, `${i + 1}`, evaluatedValue);
         evaluatedArguments[i] = evaluatedValue;
       }
@@ -149,25 +195,35 @@ const evaluate = (ast, environment = { ...defaultEnvironment }) => {
       checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
       const functionEnvironment = { ...environment, ...closureEnvironment };
       for (let i = 0; i < argumentNames.length; i++) {
-        const evaluatedValue = evaluate(ast[i + 1], environment);
+        const evaluatedValue = evaluate(ast[i + 1], environment, depth + 1);
         // checkArgumentIsNumber(name, `${i + 1}`, evaluatedValue);
         functionEnvironment[argumentNames[i]] = evaluatedValue;
       }
-      return evaluate(functionBody, functionEnvironment);
+      return evaluate(functionBody, functionEnvironment, depth + 1);
     }
     if (isCallByNameFunction(func)) {
       const [_, argumentNames, functionBody, closureEnvironment] = func;
       checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
       const functionEnvironment = { ...environment, ...closureEnvironment };
       for (let i = 0; i < argumentNames.length; i++) {
-        functionEnvironment[argumentNames[i]] = ast[i + 1];
+        functionEnvironment[argumentNames[i]] = lazyEvaluate(
+          ast[i + 1],
+          environment,
+          depth + 1
+        );
       }
-      // functionEnvironment["evaluate"] = body =>
-      //   evaluate(body, functionEnvironment);
-      return evaluate(functionBody, functionEnvironment);
+      const result = evaluate(functionBody, functionEnvironment, depth + 1);
+      // TODO: which one is correct?
+      if (!isExpression(functionBody)) {
+        return result[1];
+      }
+      // if (depth === 0 && isLazy(result)) {
+      //   return result[1];
+      // }
+      return result;
     }
     throw new RuntimeError(
-      `"${isSymbol(name) ? name : func}" is not a function`
+      `"${isSymbol(name) ? name : func}" (${func}) is not a function`
     );
   }
 };
@@ -208,30 +264,6 @@ const assert = require("assert");
     parse("(define less (callByName (x' y') (evaluate (< x' y'))))"),
     testEnvironment
   );
-
-  // it doesn't work with call-by-value
-  try {
-    evaluate(
-      parse(`
-        (define if-error (function (condition then else)
-          ((evaluate condition)
-            then
-            else
-          )
-        ))`),
-      testEnvironment
-    );
-    const result = evaluate(
-      parse("(if-error (< 2 1) unknownVariable 100)"),
-      testEnvironment
-    );
-    assert.equal(result, 100);
-  } catch (e) {
-    assert.equal(
-      e.message,
-      'Can\'t find "unknownVariable" variable. Use `(define unknownVariable ...)` to define it'
-    );
-  }
   // it does work with call-by-name
   evaluate(
     parse(`
@@ -244,11 +276,40 @@ const assert = require("assert");
       ))`),
     testEnvironment
   );
-  const result = evaluate(
+  // values work
+  let result = evaluate(
+    parse("(if (less 2 1) unknownVariable 100)"),
+    testEnvironment
+  );
+  assert.equal(result, 100);
+  // expressions work
+  result = evaluate(
     parse("(if (less 2 1) (unknownVariable) (+ 99 1))"),
     testEnvironment
   );
   assert.equal(result, 100);
+
+  // it doesn't work with call-by-value
+  try {
+    evaluate(
+      parse(`
+        (define if2 (function
+          (condition then else)
+          (condition then else)
+        ))`),
+      testEnvironment
+    );
+    let result = evaluate(
+      parse("(if2 (less 2 1) unknownVariable 100)"),
+      testEnvironment
+    );
+    assert.equal(result, 100);
+  } catch (e) {
+    assert.equal(
+      e.message,
+      'Can\'t find "unknownVariable" variable. Use `(define unknownVariable ...)` to define it'
+    );
+  }
 
   //
   // The Y combinator https://mvanier.livejournal.com/2897.html
@@ -263,30 +324,6 @@ const assert = require("assert");
       )`),
     testEnvironment
   );
-  // it doesn't work with call-by-value
-  try {
-    evaluate(
-      parse(`
-        (define factorial-error (Y
-          (function (fact)
-            (function (n)
-              (if (< n 2)
-                1
-                (* n (fact (- n 1)))
-              )
-            )
-          )
-        ))`),
-      testEnvironment
-    );
-    const factorialFive = evaluate(
-      parse("(factorial-error 5)"),
-      testEnvironment
-    );
-    assert.equal(factorialFive, 120);
-  } catch (e) {
-    assert.equal(e.message, "Maximum call stack size exceeded");
-  }
   // it does work with call-by-name
   evaluate(
     parse(`
@@ -304,6 +341,37 @@ const assert = require("assert");
   );
   const factorialFive = evaluate(parse("(factorial 5)"), testEnvironment);
   assert.equal(factorialFive, 120);
+
+  // it doesn't work with call-by-value
+  try {
+    evaluate(
+      parse(`
+        (define Y2
+          (function (f)
+            (f (Y2 f))
+          )
+        )`),
+      testEnvironment
+    );
+    evaluate(
+      parse(`
+        (define factorial2 (Y2
+          (function (fact)
+            (function (n)
+              (if (less n 2)
+                (+ 1 0)
+                (* n (fact (- n 1)))
+              )
+            )
+          )
+        ))`),
+      testEnvironment
+    );
+    const factorialFive = evaluate(parse("(factorial2 5)"), testEnvironment);
+    assert.equal(factorialFive, 120);
+  } catch (e) {
+    assert.equal(e.message, "Maximum call stack size exceeded");
+  }
 }
 
 const environment = { ...defaultEnvironment };

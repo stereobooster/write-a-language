@@ -47,28 +47,9 @@ const isFunction = ast =>
 const isNativeFunction = ast => typeof ast === "function";
 const isLazy = ast => isList(ast) && ast[0] === "lazy";
 
-const isExpression = ast => isList(ast) && !isFunction(ast);
-
-const lazyEvaluate = (ast, environment, depth) => {
-  // if we get lazy computation return it
-  if (isLazy(ast)) return ast;
-  // if we get expression return lazy computation
-  if (isExpression(ast)) return ["lazy", ast, environment];
-  // special case
-  //   if symbol is not defined yet, we postpone evaluation to make it behave more "lazy"
-  //   if it won't be defined at the moment of "exhaustiveEvaluate" it will result in error
-  if (isSymbol(ast) && environment[ast] === undefined)
-    return ["lazy", ast, environment];
-  // sanity check
-  if (!(isSymbol(ast) || isNumber(ast) || isFunction(ast)) && isExpression(ast))
-    throw new Error("We don't expect this");
-  return evaluate(ast, environment, depth);
-};
-
 const prettyPrinter = (ast, environment = {}) => {
   if (isFunction(ast)) {
     return `F(${prettyPrinter(ast[1])} …)`;
-    // return `F ${prettyPrinter(ast[1])} ${prettyPrinter(ast[2])}`;
   } else if (isSymbol(ast)) {
     if (isAtom(environment[ast])) {
       return `${ast}=${environment[ast]}`;
@@ -76,7 +57,6 @@ const prettyPrinter = (ast, environment = {}) => {
       return ast;
     } else if (environment[ast] !== undefined) {
       return `${ast}=${prettyPrinter(environment[ast], environment)}`;
-      // return `${ast}=${prettyPrinter(environment[ast], environment)}`;
     } else {
       return ast;
     }
@@ -134,6 +114,24 @@ const checkArgumentIsListOfSymbols = (name, position, value) => {
 const defaultEnvironment = {
   "+": (a, b) => a + b,
   "-": (a, b) => a - b
+};
+
+const isExpression = ast => isList(ast) && !isFunction(ast);
+
+const lazyEvaluate = (ast, environment, depth) => {
+  // if we get lazy computation return it
+  if (isLazy(ast)) return ast;
+  // if we get expression return lazy computation
+  if (isExpression(ast)) return ["lazy", ast, environment];
+  // special case
+  //   if symbol is not defined yet, we postpone evaluation to make it behave more "lazy"
+  //   if it won't be defined at the moment of "exhaustiveEvaluate" it will result in error
+  if (isSymbol(ast) && environment[ast] === undefined)
+    return ["lazy", ast, environment];
+  // sanity check
+  if (!(isSymbol(ast) || isNumber(ast) || isFunction(ast)) && isExpression(ast))
+    throw new Error("We don't expect this");
+  return evaluate(ast, environment, depth);
 };
 
 const exhaustiveEvaluate = (ast, environment, depth) => {
@@ -198,7 +196,7 @@ const evaluate = (ast, environment = { ...defaultEnvironment }, depth = 0) => {
     if (isFunction(func)) {
       const [_, argumentNames, functionBody, closureEnvironment] = func;
       checkNumberOfArguments(name, numberOfArguments, argumentNames.length);
-      let functionEnvironment = {};
+      const functionEnvironment = { ...environment, ...closureEnvironment };
       for (let i = 0; i < argumentNames.length; i++) {
         functionEnvironment[argumentNames[i]] = lazyEvaluate(
           ast[i + 1],
@@ -206,11 +204,6 @@ const evaluate = (ast, environment = { ...defaultEnvironment }, depth = 0) => {
           depth + 1
         );
       }
-      functionEnvironment = {
-        ...environment,
-        ...closureEnvironment,
-        ...functionEnvironment
-      };
       if (depth === 0) {
         return exhaustiveEvaluate(functionBody, functionEnvironment, depth + 1);
       } else {
@@ -259,7 +252,7 @@ const assert = require("assert");
     testEnvironment
   );
   assert.equal(result, 100);
-  // expression works
+  // expressions work
   result = evaluate(
     parse("(if (less 2 1) (unknownVariable) (+ 99 1))"),
     testEnvironment
