@@ -55,20 +55,8 @@ const parenthesise = (ast, parenthesis) =>
     : prettyPrint(ast, parenthesis);
 
 const prettyPrintVariables = ast => (isList(ast) ? ast.join("") : ast);
-// {
-//   if (isList(ast)) {
-//     if (ast.length > 1) {
-//       return `(${ast.join(" ")})`;
-//     } else {
-//       return ast.join("");
-//     }
-//   } else {
-//     return ast;
-//   }
-// };
 
 const prettyPrint = (ast, parenthesis = false) => {
-  // lambda
   if (isLambdaTerm(ast)) {
     const [lambda, variables, body] = ast;
     parenthesis = parenthesis || isApplication(body);
@@ -90,20 +78,21 @@ const prettyPrint = (ast, parenthesis = false) => {
   }
 };
 
-const curry = ast => {
+// α-renaming
+const alpha = (ast, argument) => {
   if (!isLambdaTerm(ast)) {
     throw new RuntimeError(`Lambda term expected (${ast})`);
   }
-  const [lambda, variables, body] = ast;
-  if (variables.length === 1) return ast;
-  let newAst = body;
-  for (let i = variables.length - 1; i >= 0; i--) {
-    newAst = [lambda, variables[i], newAst];
-  }
-  return newAst;
+  let [_, variables, body] = ast;
+  variables = isList(variables) ? variables : [variables];
+  body = isList(body) ? body : [body];
+  const [variable, ...restVariables] = variables;
+  // reduction
+  body = body.map(x => (x === variable ? argument : x));
+  return [_, [argument, ...restVariables], body];
 };
-// const uncurry = ast => {
 
+// β-reduction
 const beta = ast => {
   if (!isApplication(ast)) {
     throw new RuntimeError(`Application term expected (${ast})`);
@@ -116,19 +105,6 @@ const beta = ast => {
   // reduction
   body = body.map(x => (x === variable ? argument : x));
   return variables.length === 1 ? body : [_, restVariables, body];
-};
-
-const alpha = (ast, argument) => {
-  if (!isLambdaTerm(ast)) {
-    throw new RuntimeError(`Lambda term expected (${ast})`);
-  }
-  let [_, variables, body] = ast;
-  variables = isList(variables) ? variables : [variables];
-  body = isList(body) ? body : [body];
-  const [variable, ...restVariables] = variables;
-  // reduction
-  body = body.map(x => (x === variable ? argument : x));
-  return [_, [argument, ...restVariables], body];
 };
 
 // η-conversion
@@ -148,6 +124,23 @@ const eta = ast => {
 };
 // const uneta = ast => {
 
+const curry = ast => {
+  if (!isLambdaTerm(ast)) {
+    throw new RuntimeError(`Lambda term expected (${ast})`);
+  }
+  const [lambda, variables, body] = ast;
+  if (variables.length === 1) return ast;
+  let newAst = body;
+  for (let i = variables.length - 1; i >= 0; i--) {
+    newAst = [lambda, variables[i], newAst];
+  }
+  return newAst;
+};
+// const uncurry = ast => {
+
+// TODO need to check correctnes, that there is no shadow names
+const check = ast => {};
+
 const reduce = (ast, environment, depth) => {};
 
 // Tests
@@ -161,11 +154,7 @@ const assert = require("assert");
   assert.equal(prettyPrint(parse("((λ(x y) (y x)) (λx x))")), "(λxy.y x) λx.x");
   assert.equal(prettyPrint(parse("(λx ((λy y) x))")), "λx.(λy.y) x");
 
-  // currying
-  const curried = curry(parse("(λ (x y) (x y))"));
-  assert.equal(prettyPrint(curried), "λx.λy.x y");
-
-  // α-renaming
+  // alpha
   assert.equal(prettyPrint(alpha(parse("(λx x)"), "z")), "λz.z");
 
   // beta
@@ -174,6 +163,10 @@ const assert = require("assert");
   assert.equal(prettyPrint(beta(parse("((λ (x y) x) (λx x))"))), "λy.λx.x");
   // error - we need De Bruijn Representation
   // assert.equal(prettyPrint(beta(parse("((λ (x y) x) (λy y))"))), "λy.λx.x");
+
+  // currying
+  const curried = curry(parse("(λ (x y) (x y))"));
+  assert.equal(prettyPrint(curried), "λx.λy.x y");
 
   // eta
   assert.equal(prettyPrint(eta(parse("(λx ((λy y) x))"))), "λy.y");
